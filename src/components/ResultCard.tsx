@@ -11,6 +11,12 @@ const STAT_KEYS: { key: keyof R['stats']; label: string }[] = [
   { key: 'actitud', label: 'Actitud' },
 ];
 
+const STORY_SIZE = { width: 1080, height: 1920 };
+
+function prettyKey(key: string) {
+  return key.replace('_', ' × ').toUpperCase();
+}
+
 export default function ResultCard({ data, badgeOverride }: { data: R; badgeOverride?: string }) {
   const cardRef  = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -29,8 +35,7 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
     });
   }, [data.id, data.key]);
 
-  const prettyKey = (key: string) => key.replace('_', ' × ').toUpperCase();
-  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
 
   async function shareStory() {
     if (busy) return;
@@ -41,7 +46,7 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       const canAnimated =
         !isIOS() &&
         typeof MediaRecorder !== 'undefined' &&
-        !!HTMLCanvasElement.prototype.captureStream &&
+        typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
         !!videoRef.current &&
         !videoRef.current.paused;
 
@@ -59,7 +64,7 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
     }
   }
 
-  /** STORY ESTÁTICO = SOLO LA CARTA (sin fondo ni footer).
+  /** STORY ESTÁTICO: compone la carta dentro de un lienzo 9:16 listo para Instagram.
    *  html2canvas no dibuja <video>, así que colocamos un <img> con el poster
    *  como overlay durante la captura.
    */
@@ -101,8 +106,11 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
         }
       }
 
+      const cardRect = card.getBoundingClientRect();
+      const heroRect = hero ? relativeRect(hero.getBoundingClientRect(), cardRect) : null;
+      const colors = getCardColors(card);
       const SCALE = clamp(window.devicePixelRatio || 2, 1.5, 2.5);
-      const canvas = await html2canvas(card, {
+      const cardCanvas = await html2canvas(card, {
         backgroundColor: null,
         scale: SCALE,
         useCORS: true,
@@ -112,23 +120,35 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
         scrollY: 0,
       });
 
-      const blob = await canvasToBlobPng(canvas);
-      const file = new File([blob], `VIBE-${data.key}.png`, { type: 'image/png' });
-      const canFiles = (navigator as any).canShare?.({ files: [file] });
+        const composition = composeStoryBase({
+          cardCanvas,
+          cardSize: { width: cardRect.width, height: cardRect.height },
+          heroRect,
+          colors,
+          data,
+        });
 
-      if ((navigator as any).share && canFiles) {
-        await (navigator as any).share({
+        const blob = await canvasToBlobPng(composition.canvas);
+        const file = new File([blob], `VIBE-${data.key}.png`, { type: 'image/png' });
+        const shareData: ShareData = {
           files: [file],
           title: 'Mi VIBE',
           text: `Mi VIBE es ${prettyKey(data.key)} — ${data.title}`,
-        });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `VIBE-${data.key}.png`;
-        document.body.appendChild(a); a.click(); a.remove();
+        };
+
+        if (
+          typeof navigator.canShare === 'function' &&
+          navigator.canShare(shareData) &&
+          typeof navigator.share === 'function'
+        ) {
+          await navigator.share(shareData);
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `VIBE-${data.key}.png`;
+          document.body.appendChild(a); a.click(); a.remove();
         URL.revokeObjectURL(url);
-        setToast('Imagen guardada (solo la carta). Súbela a tu Story ✨');
+        setToast('Imagen guardada en formato Story ✨');
       }
     } finally {
       if (posterImg && posterImg.parentNode) posterImg.parentNode.removeChild(posterImg);
@@ -137,7 +157,7 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
     }
   }
 
-  /** STORY ANIMADO = SOLO LA CARTA (pinta el vídeo dentro del hero en cada frame). */
+  /** STORY ANIMADO: reconstituye la carta animada dentro del lienzo 9:16. */
   async function tryShareAnimatedOnlyCard(): Promise<boolean> {
     try {
       const card = cardRef.current!;
@@ -153,6 +173,9 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       vid.style.opacity = '0';
       await nextFrame();
 
+      const cardRect = card.getBoundingClientRect();
+      const heroRect = relativeRect(hero.getBoundingClientRect(), cardRect);
+      const colors = getCardColors(card);
       const SCALE = clamp(window.devicePixelRatio || 2, 1.5, 2.5);
       const baseCanvas = await html2canvas(card, {
         backgroundColor: null,
@@ -165,21 +188,21 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       });
       vid.style.opacity = prevOpacity || '';
 
-      // Coordenadas hero en el canvas escalado
-      const cardRect = card.getBoundingClientRect();
-      const heroRect = hero.getBoundingClientRect();
-      const heroX = (heroRect.left - cardRect.left) * SCALE;
-      const heroY = (heroRect.top  - cardRect.top ) * SCALE;
-      const heroW = heroRect.width  * SCALE;
-      const heroH = heroRect.height * SCALE;
+      const composition = composeStoryBase({
+        cardCanvas: baseCanvas,
+        cardSize: { width: cardRect.width, height: cardRect.height },
+        heroRect,
+        colors,
+        data,
+      });
 
-      // Canvas de salida
-      const W = baseCanvas.width;
-      const H = baseCanvas.height;
+      const { canvas: storyBase, heroRect: heroOnStory } = composition;
       const canvas = document.createElement('canvas');
-      canvas.width = W; canvas.height = H;
-      const ctx = canvas.getContext('2d')!;
-      const stream = (canvas as any).captureStream?.(30);
+      canvas.width = storyBase.width;
+      canvas.height = storyBase.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { setCapturing(false); return false; }
+      const stream = canvas.captureStream?.(30);
       if (!stream) { setCapturing(false); return false; }
 
       const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus' });
@@ -190,18 +213,20 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       const t0 = performance.now();
 
       function drawFrame(now: number) {
-        ctx.clearRect(0, 0, W, H);
-        ctx.drawImage(baseCanvas, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(storyBase, 0, 0);
 
-        // object-fit: cover para el vídeo en el rect hero
-        const vw = vid.videoWidth || 9;
-        const vh = vid.videoHeight || 16;
-        const scale = Math.max(heroW / vw, heroH / vh);
-        const dw = vw * scale;
-        const dh = vh * scale;
-        const dx = heroX + (heroW - dw) / 2;
-        const dy = heroY + (heroH - dh) / 2;
-        try { ctx.drawImage(vid, dx, dy, dw, dh); } catch {}
+        if (heroOnStory) {
+          // object-fit: cover para el vídeo en el rect hero escalado dentro del Story
+          const vw = vid.videoWidth || 9;
+          const vh = vid.videoHeight || 16;
+          const scale = Math.max(heroOnStory.width / vw, heroOnStory.height / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          const dx = heroOnStory.x + (heroOnStory.width - dw) / 2;
+          const dy = heroOnStory.y + (heroOnStory.height - dh) / 2;
+          try { ctx.drawImage(vid, dx, dy, dw, dh); } catch {}
+        }
 
         if (now - t0 < durationMs) requestAnimationFrame(drawFrame);
         else recorder.stop();
@@ -215,10 +240,14 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       });
 
       const file = new File([blob], `VIBE-${data.key}.webm`, { type: 'video/webm' });
-      const canFiles = (navigator as any).canShare?.({ files: [file] });
+      const videoShareData: ShareData = { files: [file], title: 'Mi VIBE' };
 
-      if ((navigator as any).share && canFiles) {
-        await (navigator as any).share({ files: [file], title: 'Mi VIBE' });
+      if (
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare(videoShareData) &&
+        typeof navigator.share === 'function'
+      ) {
+        await navigator.share(videoShareData);
         setCapturing(false);
         return true;
       }
@@ -229,7 +258,7 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
       a.href = url; a.download = `VIBE-${data.key}.webm`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-      setToast('Vídeo guardado (solo la carta). Si Instagram no admite .webm, usa la imagen PNG.');
+      setToast('Vídeo guardado en formato Story. Si Instagram no admite .webm, usa la imagen PNG.');
       setCapturing(false);
       return true;
     } catch (e) {
@@ -240,16 +269,15 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
   }
 
   // Variables CSS por-VIBE (badge, botón, barras)
-  const styleVars = {
-    // @ts-ignore custom props
-    '--color-start': data.colors?.[0] || 'var(--urban)',
-    '--color-end':   data.colors?.[1] || 'var(--deluxe)',
-  } as React.CSSProperties;
+    const styleVars: React.CSSProperties = {
+      '--color-start': data.colors?.[0] || 'var(--urban)',
+      '--color-end': data.colors?.[1] || 'var(--deluxe)',
+    };
 
   return (
     <article
       className={`result-card ${capturing ? 'capture' : ''}`}
-      ref={cardRef as any}
+        ref={cardRef}
       style={styleVars}
       aria-label={`Carta ${data.key}`}
     >
@@ -313,12 +341,194 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
 }
 
 /* utils */
+type SimpleRect = { x: number; y: number; width: number; height: number };
+type StoryLayout = {
+  width: number;
+  height: number;
+  drawWidth: number;
+  drawHeight: number;
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+};
+
+function composeStoryBase({
+  cardCanvas,
+  cardSize,
+  heroRect,
+  colors,
+  data,
+}: {
+  cardCanvas: HTMLCanvasElement;
+  cardSize: { width: number; height: number };
+  heroRect: SimpleRect | null;
+  colors: [string, string];
+  data: R;
+}): { canvas: HTMLCanvasElement; layout: StoryLayout; heroRect: SimpleRect | null } {
+  const layout = computeStoryLayout(cardSize.width, cardSize.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = layout.width;
+  canvas.height = layout.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('No canvas context');
+
+  paintStoryBackground(ctx, layout, colors);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = 120;
+  ctx.shadowOffsetY = 50;
+  ctx.drawImage(
+    cardCanvas,
+    0,
+    0,
+    cardCanvas.width,
+    cardCanvas.height,
+    layout.offsetX,
+    layout.offsetY,
+    layout.drawWidth,
+    layout.drawHeight,
+  );
+  ctx.restore();
+
+  drawStoryBranding(ctx, layout, data);
+
+  const heroOnStory = heroRect
+    ? {
+        x: layout.offsetX + heroRect.x * layout.scale,
+        y: layout.offsetY + heroRect.y * layout.scale,
+        width: heroRect.width * layout.scale,
+        height: heroRect.height * layout.scale,
+      }
+    : null;
+
+  return { canvas, layout, heroRect: heroOnStory };
+}
+
+function computeStoryLayout(cardWidth: number, cardHeight: number): StoryLayout {
+  const { width: STORY_W, height: STORY_H } = STORY_SIZE;
+  const maxCardWidth = STORY_W * 0.78;
+  const maxCardHeight = STORY_H * 0.68;
+  const scale = Math.min(maxCardWidth / cardWidth, maxCardHeight / cardHeight);
+  const drawWidth = Math.round(cardWidth * scale);
+  const drawHeight = Math.round(cardHeight * scale);
+  const centeredY = (STORY_H - drawHeight) / 2;
+  const minY = 220;
+  const maxY = Math.max(minY, STORY_H - drawHeight - 160);
+  const offsetY = Math.round(clamp(centeredY + 40, minY, maxY));
+  const offsetX = Math.round((STORY_W - drawWidth) / 2);
+
+  return {
+    width: STORY_W,
+    height: STORY_H,
+    drawWidth,
+    drawHeight,
+    offsetX,
+    offsetY,
+    scale,
+  };
+}
+
+function paintStoryBackground(ctx: CanvasRenderingContext2D, layout: StoryLayout, colors: [string, string]) {
+  const [start, end] = colors;
+  const { width: W, height: H } = layout;
+  ctx.fillStyle = '#060611';
+  ctx.fillRect(0, 0, W, H);
+
+  const glowA = ctx.createRadialGradient(W * 0.25, H * 0.2, W * 0.05, W * 0.25, H * 0.2, W * 0.9);
+  glowA.addColorStop(0, withAlpha(start, 0.7));
+  glowA.addColorStop(1, 'rgba(6,6,17,0)');
+  ctx.fillStyle = glowA;
+  ctx.fillRect(0, 0, W, H);
+
+  const glowB = ctx.createRadialGradient(W * 0.85, H * 0.8, W * 0.05, W * 0.85, H * 0.8, W * 0.75);
+  glowB.addColorStop(0, withAlpha(end, 0.6));
+  glowB.addColorStop(1, 'rgba(6,6,17,0)');
+  ctx.fillStyle = glowB;
+  ctx.fillRect(0, 0, W, H);
+
+  const overlay = ctx.createLinearGradient(0, 0, 0, H);
+  overlay.addColorStop(0, 'rgba(255,255,255,0.05)');
+  overlay.addColorStop(0.45, 'rgba(0,0,0,0)');
+  overlay.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = overlay;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawStoryBranding(ctx: CanvasRenderingContext2D, layout: StoryLayout, data: R) {
+  const centerX = layout.width / 2;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.font = '600 56px "Sora", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  ctx.fillText('MI VIBE ES', centerX, 150);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 86px "Sora", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  ctx.fillText(prettyKey(data.key), centerX, 250);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.68)';
+  ctx.font = '500 32px "Sora", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  ctx.fillText('Comparte tu resultado con #VibesTest', centerX, layout.height - 90);
+  ctx.restore();
+}
+
+function relativeRect(child: DOMRect, parent: DOMRect): SimpleRect {
+  return {
+    x: child.left - parent.left,
+    y: child.top - parent.top,
+    width: child.width,
+    height: child.height,
+  };
+}
+
+function getCardColors(card: HTMLElement): [string, string] {
+  const styles = getComputedStyle(card);
+  const start = styles.getPropertyValue('--color-start').trim() || 'rgb(255,47,156)';
+  const end = styles.getPropertyValue('--color-end').trim() || 'rgb(0,212,255)';
+  return [start, end];
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const c = color.trim();
+  const rgb = c.startsWith('rgb') ? parseRgbComponents(c) : hexToRgb(c);
+  if (!rgb) return `rgba(255,255,255,${alpha})`;
+  const [r, g, b] = rgb;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function parseRgbComponents(input: string): [number, number, number] | null {
+  const match = input.match(/rgba?\(([^)]+)\)/i);
+  if (!match) return null;
+  const [r, g, b] = match[1]
+    .split(',')
+    .slice(0, 3)
+    .map((part) => Number.parseInt(part.trim(), 10));
+  if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+  return [r, g, b];
+}
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  let normalized = hex.replace('#', '').trim();
+  if (normalized.length === 3) {
+    normalized = normalized.split('').map(ch => ch + ch).join('');
+  }
+  if (normalized.length !== 6) return null;
+  const num = Number.parseInt(normalized, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return [r, g, b];
+}
+
 function nextFrame(): Promise<void> {
   return new Promise(r => requestAnimationFrame(() => r()));
 }
 function clamp(n: number, min: number, max: number){ return Math.max(min, Math.min(max, n)); }
 function hashCode(str: string){
-  let h = 0, i = 0, len = str.length;
+  let h = 0;
+  let i = 0;
+  const len = str.length;
   while (i < len) { h = (h<<5) - h + str.charCodeAt(i++) | 0; }
   return h;
 }

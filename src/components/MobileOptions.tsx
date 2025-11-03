@@ -30,7 +30,8 @@ export default function MobileOptions({ options, qIndex, onSelect, selectedVibe 
     const wrap = wrapRef.current;
     if(!wrap) return;
     wrap.scrollTo({ left: 0, behavior: 'instant' as ScrollBehavior });
-    setActive(0);
+    const frame = requestAnimationFrame(() => setActive(0));
+    return () => cancelAnimationFrame(frame);
   }, [qIndex]);
 
   return (
