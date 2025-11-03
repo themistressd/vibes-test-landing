@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ResultCard as R } from '@/data/results';
 import html2canvas from 'html2canvas';
 
@@ -12,6 +12,19 @@ const STAT_KEYS: { key: keyof R['stats']; label: string }[] = [
 ];
 
 const STORY_SIZE = { width: 1080, height: 1920 };
+
+const ROOT_COLOR_MAP = {
+  '--spicy':  '#FF441A',
+  '--deluxe': '#00D4FF',
+  '--deluxe2': '#B6FFF8',
+  '--urban':  '#FF2F9C',
+  '--chill':  '#C9FFE9',
+  '--artsy':  '#E4FF00',
+  '--ink':    '#0b0b10',
+} as const;
+
+const DEFAULT_START = ROOT_COLOR_MAP['--urban'];
+const DEFAULT_END = ROOT_COLOR_MAP['--deluxe'];
 
 function prettyKey(key: string) {
   return key.replace('_', ' × ').toUpperCase();
@@ -269,10 +282,24 @@ export default function ResultCard({ data, badgeOverride }: { data: R; badgeOver
   }
 
   // Variables CSS por-VIBE (badge, botón, barras)
-    const styleVars: React.CSSProperties = {
-      '--color-start': data.colors?.[0] || 'var(--urban)',
-      '--color-end': data.colors?.[1] || 'var(--deluxe)',
-    };
+  const startSource = data.colors?.[0];
+  const endSource = data.colors?.[1];
+
+  const styleVars = useMemo<React.CSSProperties>(() => {
+    const startColor = resolveColorToken(startSource, DEFAULT_START);
+    const endColor = resolveColorToken(endSource, DEFAULT_END);
+
+    return {
+      '--color-start': startColor,
+      '--color-end': endColor,
+      '--color-start-40': withAlpha(startColor, 0.4, DEFAULT_START),
+      '--color-end-35': withAlpha(endColor, 0.35, DEFAULT_END),
+      '--color-end-28': withAlpha(endColor, 0.28, DEFAULT_END),
+      '--color-end-25': withAlpha(endColor, 0.25, DEFAULT_END),
+      '--color-end-45': withAlpha(endColor, 0.45, DEFAULT_END),
+      '--color-end-75': withAlpha(endColor, 0.75, DEFAULT_END),
+    } as React.CSSProperties;
+  }, [startSource, endSource]);
 
   return (
     <article
@@ -436,13 +463,13 @@ function paintStoryBackground(ctx: CanvasRenderingContext2D, layout: StoryLayout
   ctx.fillRect(0, 0, W, H);
 
   const glowA = ctx.createRadialGradient(W * 0.25, H * 0.2, W * 0.05, W * 0.25, H * 0.2, W * 0.9);
-  glowA.addColorStop(0, withAlpha(start, 0.7));
+  glowA.addColorStop(0, withAlpha(start, 0.7, DEFAULT_START));
   glowA.addColorStop(1, 'rgba(6,6,17,0)');
   ctx.fillStyle = glowA;
   ctx.fillRect(0, 0, W, H);
 
   const glowB = ctx.createRadialGradient(W * 0.85, H * 0.8, W * 0.05, W * 0.85, H * 0.8, W * 0.75);
-  glowB.addColorStop(0, withAlpha(end, 0.6));
+  glowB.addColorStop(0, withAlpha(end, 0.6, DEFAULT_END));
   glowB.addColorStop(1, 'rgba(6,6,17,0)');
   ctx.fillStyle = glowB;
   ctx.fillRect(0, 0, W, H);
@@ -484,14 +511,35 @@ function relativeRect(child: DOMRect, parent: DOMRect): SimpleRect {
 
 function getCardColors(card: HTMLElement): [string, string] {
   const styles = getComputedStyle(card);
-  const start = styles.getPropertyValue('--color-start').trim() || 'rgb(255,47,156)';
-  const end = styles.getPropertyValue('--color-end').trim() || 'rgb(0,212,255)';
+  const startRaw = styles.getPropertyValue('--color-start').trim();
+  const endRaw = styles.getPropertyValue('--color-end').trim();
+  const start = resolveColorToken(startRaw || undefined, DEFAULT_START);
+  const end = resolveColorToken(endRaw || undefined, DEFAULT_END);
   return [start, end];
 }
 
-function withAlpha(color: string, alpha: number): string {
-  const c = color.trim();
-  const rgb = c.startsWith('rgb') ? parseRgbComponents(c) : hexToRgb(c);
+function resolveColorToken(color: string | undefined, fallback: string): string {
+  if (!color) return fallback;
+  const trimmed = color.trim();
+  if (trimmed.startsWith('var(')) {
+    const match = trimmed.match(/var\((--[^),\s]+)/);
+    if (match) {
+      const varName = match[1] as keyof typeof ROOT_COLOR_MAP;
+      const mapped = ROOT_COLOR_MAP[varName];
+      if (mapped) return mapped;
+      if (typeof window !== 'undefined') {
+        const resolved = getComputedStyle(document.documentElement).getPropertyValue(match[1]).trim();
+        if (resolved) return resolved;
+      }
+    }
+    return fallback;
+  }
+  return trimmed;
+}
+
+function withAlpha(color: string, alpha: number, fallback: string = DEFAULT_START): string {
+  const source = resolveColorToken(color, fallback);
+  const rgb = source.startsWith('rgb') ? parseRgbComponents(source) : hexToRgb(source);
   if (!rgb) return `rgba(255,255,255,${alpha})`;
   const [r, g, b] = rgb;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
