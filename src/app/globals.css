@@ -1,0 +1,333 @@
+:root{
+  --spicy:#FF441A;
+  --deluxe:#00D4FF; --deluxe2:#B6FFF8;
+  --urban:#FF2F9C;
+  --chill:#C9FFE9;
+  --artsy:#E4FF00;
+  --ink:#0b0b10;
+}
+
+*{ box-sizing:border-box }
+html,body{ padding:0; margin:0; background:#0b0b10; color:#fff; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; }
+a{ color:inherit; text-decoration:none }
+
+.container{ min-height:100svh; display:grid; grid-template-rows: auto 1fr auto; }
+.main{ display:grid; place-items:center; padding:24px; }
+.wrap{ width:min(1040px, 96vw); margin:0 auto; }
+
+/* ===== Botones ===== */
+.btn{
+  padding:12px 18px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.06);
+  color:#fff;
+  backdrop-filter: blur(6px);
+  cursor:pointer;
+}
+.btn-primary{
+  border-color: transparent;
+  background: linear-gradient(90deg, var(--urban), var(--deluxe));
+  box-shadow: 0 6px 24px rgba(255,47,156,.35), inset 0 0 0 1px rgba(255,255,255,.15);
+}
+
+/* ===== Grid de opciones ===== */
+.grid{ display:grid; gap:12px; }
+@media (min-width:760px){ .grid.cols-3{ grid-template-columns: repeat(3, 1fr);} }
+
+.card{
+  border:1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.04);
+  border-radius:16px;
+  overflow:hidden;
+}
+.opt{
+  text-align:left;
+  padding:12px;
+  transition: transform .12s ease, box-shadow .2s ease;
+}
+.opt:hover{ transform: translateY(-1px); }
+
+.gif{
+  aspect-ratio: 4/3;
+  width:100%;
+  border-radius:12px;
+  overflow:hidden;
+  background:#101019;
+  margin-bottom:10px;
+}
+.opt video{ width:100%; height:100%; object-fit:cover; display:block; }
+
+/* Texto de las opciones */
+.opt-text{
+  font-size:14px; line-height:1.35;
+  color:#fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+
+/* ===== Progreso global del test ===== */
+.progress{ display:flex; align-items:center; gap:12px; padding:10px 0 16px; }
+.bar{ flex:1; height:8px; background:rgba(255,255,255,.08); border-radius:99px; overflow:hidden; }
+.bar > i{
+  display:block; height:100%; width:0%;
+  background: linear-gradient(90deg, var(--urban), var(--deluxe));
+  border-radius:99px; transition: width .35s ease;
+}
+.step{ font-size:12px; opacity:.85; min-width:70px; text-align:right; }
+
+/* ===== Result layout ===== */
+.result-wrap{
+  display:grid;
+  grid-template-columns: 1fr;
+  place-content:center;
+}
+@media (min-width:980px){
+  .result-wrap{ max-width:min(900px, 92vw); margin:0 auto; }
+}
+
+/* ===== Result card ===== */
+.result-card{
+  position:relative;
+  display:grid;
+  grid-template-rows: auto 1fr auto;   /* hero / body(scroll) / footer */
+  gap:0;
+  width:min(720px, 92vw);
+  height:min(88vh, 860px);
+  margin:auto;
+  border-radius:24px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.16);
+  background: radial-gradient(120% 120% at 0% 0%, rgba(255,255,255,.06), rgba(255,255,255,.02) 60%);
+  /* colores por defecto (sobrescritos inline desde React) */
+  --color-start: var(--urban);
+  --color-end: var(--deluxe);
+}
+.result-card > *{ position: relative; z-index: 1; } /* sobre el foil */
+
+/* halo de color de la vibe */
+.result-card::before{
+  content:'';
+  position:absolute; inset:0;
+  background:
+    radial-gradient(140% 80% at 15% 0%, color-mix(in oklab, var(--color-start) 40%, transparent) 0%, transparent 60%),
+    radial-gradient(140% 80% at 85% -10%, color-mix(in oklab, var(--color-end) 35%, transparent) 0%, transparent 60%);
+  filter: saturate(120%);
+  z-index:0;
+  pointer-events:none;
+}
+
+/* foil/holográfico detrás y sin cortar */
+.result-card::after{
+  content:''; position:absolute; inset:-8%;
+  background:
+    conic-gradient(from 0deg at 50% 50%,
+      rgba(255,255,255,.08), rgba(255,255,255,0) 20%,
+      rgba(255,255,255,.12) 40%, rgba(255,255,255,0) 60%,
+      rgba(255,255,255,.1) 80%, rgba(255,255,255,0) 100%);
+  mix-blend-mode: overlay; opacity:.30; animation: holo 5.5s linear infinite;
+  pointer-events:none; z-index:0;
+}
+@keyframes holo{ 0%{ transform: translateX(-8%) rotate(0deg); } 50%{ transform: translateX(8%) rotate(2deg); } 100%{ transform: translateX(-8%) rotate(0deg); } }
+
+/* Hero rectangular (tipo trading card) */
+.result-hero{
+  position:relative;
+  width:100%;
+  height:clamp(180px, 32vh, 300px);
+  overflow:hidden;
+}
+.result-hero video, .result-hero img{
+  width:100%; height:100%; object-fit:cover; display:block;
+}
+
+/* Badge “cromada” con el mismo degradado de la VIBE */
+.badge{
+  position:absolute; top:12px; left:12px;
+  padding:6px 12px;
+  border-radius:14px;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.06em;
+  color:#0b0b10;                        /* texto oscuro para contraste */
+  background: linear-gradient(90deg, var(--color-start), var(--color-end));
+  border:1px solid color-mix(in oklab, #fff 35%, transparent);
+  box-shadow:
+    0 4px 14px color-mix(in oklab, var(--color-end) 28%, transparent),
+    inset 0 0 0 1px rgba(255,255,255,.25);
+  backdrop-filter: blur(4px);
+  z-index:2;
+}
+.badge::after{
+  content:'';
+  position:absolute; inset:1px;
+  border-radius:12px;
+  background: linear-gradient(180deg, rgba(255,255,255,.35), transparent 60%);
+  mix-blend-mode: screen;               /* pequeño brillo “gloss” */
+  pointer-events:none;
+}
+
+/* En modo captura mantenemos la badge pero sin brillo extra para nitidez */
+.result-card.capture .badge::after{ display:none; }
+
+
+/* Cuerpo con scroll interno si hace falta */
+.result-body{
+  padding:16px;
+  display:grid;
+  gap:10px;
+  overflow:auto;
+}
+.h1{ font-weight:900; font-size: clamp(22px, 2.2vw, 28px); letter-spacing:-.02em; }
+.tagline{ font-size:14px; opacity:.9; }
+.bio{ font-size:14px; line-height:1.5; opacity:.95; }
+
+/* Stats */
+.stats{ display:grid; gap:10px; margin-top:2px; }
+.stat .label{ font-size:12px; text-transform: uppercase; letter-spacing: .08em; opacity:.75; }
+.meter{ height:8px; background: rgba(255,255,255,.12); border-radius:99px; overflow:hidden; }
+.meter i{
+  display:block; height:100%; width:0%;
+  background: linear-gradient(90deg, var(--color-start), var(--color-end));
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--color-end) 25%, transparent));
+  border-radius:99px; transition: width .6s ease .1s;
+}
+
+/* Footer siempre visible dentro de la card */
+.footer-row{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:12px; padding: 0 16px 16px; min-height:56px;
+}
+.small{ font-size:12px; opacity:.75; }
+.result-card .footer-row .btn{ min-width: 180px; }
+
+/* ===== Fondo general ===== */
+body{
+  background:
+    radial-gradient(120% 120% at 50% -10%, #181828 0%, transparent 55%),
+    radial-gradient(120% 120% at 90% -20%, rgba(255,47,156,.12), transparent 50%),
+    radial-gradient(120% 120% at 10% -15%, rgba(0,212,255,.12), transparent 50%),
+    #0b0b10;
+}
+
+/* Botón glow */
+.btn-primary{
+  box-shadow: 0 0 18px rgba(255,47,156,.45), 0 0 1px rgba(255,255,255,.25) inset;
+  transition: box-shadow .25s ease, transform .08s ease;
+}
+.btn-primary:hover{ box-shadow: 0 0 28px rgba(255,47,156,.75), 0 0 1px rgba(255,255,255,.3) inset; }
+.btn-primary:active{ transform: translateY(1px); }
+
+/* Hover por VIBE en cards de opciones */
+.card.opt{ position:relative; border-color: rgba(255,255,255,.14); }
+.card.opt:focus-visible{ outline: none; box-shadow: 0 0 0 2px rgba(255,255,255,.35) inset; }
+.card.opt[data-vibe="urban"]:hover{  border-color: var(--urban);  box-shadow: 0 0 14px color-mix(in oklab, var(--urban) 50%, transparent); }
+.card.opt[data-vibe="deluxe"]:hover{ border-color: var(--deluxe); box-shadow: 0 0 14px color-mix(in oklab, var(--deluxe) 50%, transparent); }
+.card.opt[data-vibe="artsy"]:hover{  border-color: var(--artsy);  box-shadow: 0 0 14px color-mix(in oklab, var(--artsy) 55%, transparent); }
+.card.opt[data-vibe="spicy"]:hover{  border-color: var(--spicy);  box-shadow: 0 0 14px color-mix(in oklab, var(--spicy) 55%, transparent); }
+.card.opt[data-vibe="chill"]:hover{   border-color: var(--chill);   box-shadow: 0 0 14px color-mix(in oklab, var(--chill) 55%, transparent); }
+
+/* Placeholder vídeos */
+.gif{
+  background: linear-gradient(90deg, #11121a 0%, #131420 20%, #11121a 40%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer{ 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.opt video{ background: transparent; }
+
+/* ===== Título centrado (WANTED TEST) ===== */
+.title-center{ text-align:center; margin: 0 0 12px; }
+.title-center .eyebrow{
+  font-weight:900; letter-spacing:.10em;
+  font-size: clamp(16px, 3.4vw, 18px);
+  background: linear-gradient(90deg, var(--urban), var(--deluxe));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.title-center .headline{
+  display:block; font-weight:900; letter-spacing:-.02em;
+  font-size: clamp(26px, 7vw, 44px);
+  margin-top:6px;
+}
+
+/* Pregunta + acciones con más aire en móvil */
+.question-title{ margin:16px 0 10px; }
+.actions{ display:flex; justify-content:center; align-items:center; gap: 12px; margin-top:16px; }
+
+/* ===== Mobile carousel (centrado real) ===== */
+.mobile-carousel{ margin: 8px -12px 4px; }
+.mobile-track{
+  display: grid; grid-auto-flow: column; grid-auto-columns: 100%;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; gap: 0; padding: 0 0 10px;
+  scroll-padding-inline: 12px;
+}
+.mobile-track::-webkit-scrollbar{ display:none; }
+.mobile-slide{ scroll-snap-align: center; display:grid; place-items:center; padding: 0 8px; }
+.dots{ display:flex; justify-content:center; gap:8px; margin: 8px 0 2px; }
+.dot{ width:8px; height:8px; border-radius:999px; background: rgba(255,255,255,.35); border:none; }
+.dot.active{ background:#fff; }
+@media (max-width:760px){ .card.opt{ width: min(92vw, 520px); } }
+
+/* ===== ResultCard móvil ===== */
+@media (max-width: 760px){
+  .main{ padding:12px; }
+  .result-card{
+    width: 100%;
+    height: 100dvh;
+    grid-template-rows: auto 1fr auto;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-top: max(0px,  env(safe-area-inset-top));
+  }
+  .result-hero{ height: clamp(160px, 28dvh, 240px); }
+  .result-body{ padding: 14px; gap: 8px; }
+  .h1{ font-size: clamp(18px, 5.2vw, 22px); }
+  .tagline{ font-size: 13px; }
+  .bio{ font-size: 13px; }
+  .stats{ gap:8px; }
+  .meter{ height: 6px; }
+  .badge{ top: 10px; left: 10px; font-size: 11px; padding: 5px 8px; }
+  .footer-row{ padding: 0 12px 12px; min-height:60px; }
+  .small{ font-size: 11px; }
+  .result-card .footer-row .btn{ min-width: unset; padding: 12px 14px; }
+}
+
+/* ===== Modo captura para Story (se activa desde ResultCard) ===== */
+.result-card.capture{ height:auto!important; max-height:none!important; }
+.result-card.capture::after{ display:none!important; }      /* sin foil en captura */
+.result-card.capture .result-body{ overflow:visible!important; }
+.result-card.capture .footer-row{ display:none!important; } /* oculta botón en Story */
+
+/* ===== Accesibilidad ===== */
+.btn[disabled], .btn[aria-disabled="true"]{ opacity:.45; cursor:not-allowed; filter: grayscale(20%); }
+@media (hover:none){ .card.opt:hover{ transform: none; box-shadow:none; } }
+.card.opt:focus-visible{ outline:none; box-shadow: 0 0 0 2px rgba(255,255,255,.5) inset, 0 0 0 2px rgba(255,255,255,.2); border-color: rgba(255,255,255,.6); }
+@media (prefers-reduced-motion: reduce){
+  .btn-primary, .card.opt, .bar > i, .gif, .result-card::before, .result-card::after{ animation:none!important; transition:none!important; }
+}
+
+/* fix typo en sombra seleccionada */
+.card.opt.selected{
+  transform: translateY(-2px);
+  box-shadow: 0 0 18px rgba(255,255,255,.12), inset 0 0 0 1px rgba(255,255,255,.25);
+}
+
+/* Botón “Compartir Story” adaptado al color de la VIBE con texto negro */
+.result-card .btn-primary{
+  border-color: transparent;
+  background: linear-gradient(90deg, var(--color-start), var(--color-end));
+  color: #0b0b10; /* texto negro */
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow:
+    0 0 18px color-mix(in oklab, var(--color-end) 45%, transparent),
+    0 0 1px rgba(255,255,255,.25) inset;
+  transition: box-shadow .25s ease, transform .08s ease, opacity .2s;
+}
+.result-card .btn-primary:hover{
+  box-shadow:
+    0 0 28px color-mix(in oklab, var(--color-end) 75%, transparent),
+    0 0 1px rgba(255,255,255,.3) inset;
+  color:#000; /* un pelín más intenso al hover */
+}
+.result-card .btn-primary:active{ transform: translateY(1px); }
+
